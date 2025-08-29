@@ -30,12 +30,12 @@ export class AuthTokenGuard implements CanActivate {
     }
 
     try {
-      const payload = this.jwtService.verifyAsync(token, this.jwtConfiguration);
+      const payload = await this.jwtService.verifyAsync(token, this.jwtConfiguration);
       request[REQUEST_TOKEN_PAYLOAD_NAME] = payload;
 
       const user = await this.prisma.user.findFirst({
         where: {
-          id: payload?.[Symbol.for('sub')] as number,
+          id: payload?.sub,
           active: true,
         },
       });
@@ -43,6 +43,7 @@ export class AuthTokenGuard implements CanActivate {
       if (!user?.active) {
         throw new UnauthorizedException('Usuário inativo!');
       }
+      request['user'] = user;
     } catch (err) {
       console.log(err);
       throw new UnauthorizedException('Acesso não autorizado!');

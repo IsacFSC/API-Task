@@ -38,4 +38,11 @@ model User {
   avatar       String?
   createdAt    DateTime? @default(now())
   Tasks        Task[]
+  role         Role      @default(USER)
+}
+
+enum Role {
+  ADMIN
+  LEADER
+  USER
 }

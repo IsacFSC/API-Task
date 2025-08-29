@@ -17,13 +17,18 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AuthTokenGuard } from 'src/auth/guard/auth-token.guard';
-import { TokenPayloadParam } from 'src/auth/param/token-payload.param';
-import { PayloadTokenDto } from 'src/auth/dto/payload-token.dto';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { Role } from 'src/auth/common/role.enum';
+import { ActiveUser } from 'src/auth/param/active-user.decorator';
+import { User } from '../../generated/prisma';
 import { FileInterceptor } from '@nestjs/platform-express';
 
 // > Buscar os detalhes de um usuarios
 // > cadastrar usuario
 // > Deletar usuario
+@UseGuards(AuthTokenGuard, RolesGuard)
+@Roles(Role.ADMIN)
 @Controller('users')
 export class UsersController {
   constructor(private readonly userService: UsersService) {}
@@ -39,30 +44,24 @@ export class UsersController {
     return this.userService.create(createUserDto);
   }
 
-  @UseGuards(AuthTokenGuard)
   @Patch(':id')
   updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
-    @TokenPayloadParam() tokenPayLoad: PayloadTokenDto,
+    @ActiveUser() user: User,
   ) {
-    return this.userService.update(id, updateUserDto, tokenPayLoad);
+    return this.userService.update(id, updateUserDto, user);
   }
 
-  @UseGuards(AuthTokenGuard)
   @Delete(':id')
-  deleteUser(
-    @Param('id', ParseIntPipe) id: number,
-    @TokenPayloadParam() tokenPayLoad: PayloadTokenDto,
-  ) {
-    return this.userService.delete(id, tokenPayLoad);
+  deleteUser(@Param('id', ParseIntPipe) id: number, @ActiveUser() user: User) {
+    return this.userService.delete(id, user);
   }
 
-  @UseGuards(AuthTokenGuard)
   @UseInterceptors(FileInterceptor('file'))
   @Post('upload')
   async uploadAvatar(
-    @TokenPayloadParam() tokenPayLoad: PayloadTokenDto,
+    @ActiveUser() user: User,
     @UploadedFile(
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
@@ -77,6 +76,6 @@ export class UsersController {
     )
     file: Express.Multer.File,
   ) {
-    return this.userService.uploadAvatarImage(tokenPayLoad, file);
+    return this.userService.uploadAvatarImage(user, file);
   }
 }

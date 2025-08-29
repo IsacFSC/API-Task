@@ -3,7 +3,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { HashingServiceProtocol } from 'src/auth/hash/hashing.service';
-import { PayloadTokenDto } from 'src/auth/dto/payload-token.dto';
+import { User } from '../../generated/prisma';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 
@@ -25,6 +25,7 @@ export class UsersService {
         email: true,
         avatar: true,
         Tasks: true,
+        role: true,
       },
     });
     if (user) return user;
@@ -43,11 +44,13 @@ export class UsersService {
           name: createUserDto.name,
           email: createUserDto.email,
           passwordHash: passwordHash,
+          role: createUserDto.role,
         },
         select: {
           id: true,
           name: true,
           email: true,
+          role: true,
         },
       });
       return user;
@@ -60,12 +63,7 @@ export class UsersService {
     }
   }
 
-  async update(
-    id: number,
-    updateUserDto: UpdateUserDto,
-    tokenPayLoad: PayloadTokenDto,
-  ) {
-    console.log(tokenPayLoad);
+  async update(id: number, updateUserDto: UpdateUserDto, activeUser: User) {
     try {
       const user = await this.prisma.user.findFirst({
         where: {
@@ -73,14 +71,9 @@ export class UsersService {
         },
       });
       if (!user) {
-        throw new HttpException('Uusuário não existe!', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Usuário não existe!', HttpStatus.BAD_REQUEST);
       }
-      if (user.id !== tokenPayLoad.sub) {
-        throw new HttpException(
-          'Você não tem permissão para atualizar este usuário!',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
+
       const dataUser: { name?: string; passwordHash?: string } = {
         name: updateUserDto.name ? updateUserDto.name : user.name,
       };
@@ -105,6 +98,7 @@ export class UsersService {
           name: true,
           email: true,
           Tasks: true,
+          role: true,
         },
       });
       return updateUser;
@@ -117,7 +111,7 @@ export class UsersService {
     }
   }
 
-  async delete(id: number, tokenPayLoad: PayloadTokenDto) {
+  async delete(id: number, activeUser: User) {
     try {
       const user = await this.prisma.user.findFirst({
         where: {
@@ -126,12 +120,6 @@ export class UsersService {
       });
       if (!user) {
         throw new HttpException('Usuário não existe', HttpStatus.BAD_REQUEST);
-      }
-      if (user.id !== tokenPayLoad.sub) {
-        throw new HttpException(
-          'Você não tem permissão para deletar este usuário!',
-          HttpStatus.UNAUTHORIZED,
-        );
       }
       await this.prisma.user.delete({
         where: {
@@ -150,10 +138,7 @@ export class UsersService {
     }
   }
 
-  async uploadAvatarImage(
-    tokenPayLoad: PayloadTokenDto,
-    file: Express.Multer.File,
-  ) {
+  async uploadAvatarImage(user: User, file: Express.Multer.File) {
     try {
       const mimeType = file.mimetype;
       const fileExtension = path
@@ -162,21 +147,11 @@ export class UsersService {
         .substring(1);
       console.log(mimeType);
       console.log(fileExtension);
-      const fileName = `${tokenPayLoad.sub}.${fileExtension}`;
+      const fileName = `${user.id}.${fileExtension}`;
       const fileLocale = path.resolve(process.cwd(), 'files', fileName);
       await fs.writeFile(fileLocale, file.buffer);
-      const user = await this.prisma.user.findFirst({
-        where: {
-          id: tokenPayLoad.sub,
-        },
-      });
-      if (!user) {
-        throw new HttpException(
-          'Falha ao atualizar o avatar do usuário!',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const updateUser = await this.prisma.user.update({
+
+      const updatedUser = await this.prisma.user.update({
         where: {
           id: user.id,
         },
@@ -190,7 +165,7 @@ export class UsersService {
           avatar: true,
         },
       });
-      return updateUser;
+      return updatedUser;
     } catch (err) {
       console.log(err);
       throw new HttpException(

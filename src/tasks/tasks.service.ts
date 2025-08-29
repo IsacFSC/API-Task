@@ -1,9 +1,15 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  ForbiddenException,
+} from '@nestjs/common';
 import { CreateTasksDto } from './dto/create-tasks.dto';
 import { UpdateTasksDto } from './dto/update-tasks.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { PayloadTokenDto } from 'src/auth/dto/payload-token.dto';
+import { User } from '../../generated/prisma';
+import { Role } from 'src/auth/common/role.enum';
 
 @Injectable()
 export class TasksService {
@@ -32,14 +38,14 @@ export class TasksService {
     throw new HttpException('Tarefa não encontrada', HttpStatus.NOT_FOUND);
   }
 
-  async create(createTaskDto: CreateTasksDto, tokenPayload: PayloadTokenDto) {
+  async create(createTaskDto: CreateTasksDto, user: User) {
     try {
       const newTask = await this.prisma.task.create({
         data: {
           name: createTaskDto.name,
           description: createTaskDto.description,
           completed: false,
-          userId: tokenPayload.sub,
+          userId: user.id,
         },
       });
       console.log(newTask);
@@ -53,11 +59,7 @@ export class TasksService {
     }
   }
 
-  async update(
-    id: number,
-    updateTasksDto: UpdateTasksDto,
-    tokenPayload: PayloadTokenDto,
-  ) {
+  async update(id: number, updateTasksDto: UpdateTasksDto, user: User) {
     const findTask = await this.prisma.task.findFirst({
       where: {
         id: id,
@@ -67,12 +69,12 @@ export class TasksService {
       throw new HttpException('Essa tarefa não existe!', HttpStatus.NOT_FOUND);
     }
 
-    if (findTask.userId !== tokenPayload.sub) {
-      throw new HttpException(
+    if (user.role !== Role.ADMIN && findTask.userId !== user.id) {
+      throw new ForbiddenException(
         'Você não tem permissão para editar essa tarefa!',
-        HttpStatus.FORBIDDEN,
       );
     }
+
     const task = await this.prisma.task.update({
       where: {
         id: findTask.id,
@@ -90,7 +92,7 @@ export class TasksService {
     return task;
   }
 
-  async Delete(id: number, tokenPayload: PayloadTokenDto) {
+  async Delete(id: number, user: User) {
     try {
       const findTask = await this.prisma.task.findFirst({
         where: {
@@ -103,10 +105,9 @@ export class TasksService {
           HttpStatus.NOT_FOUND,
         );
       }
-      if (findTask.userId !== tokenPayload.sub) {
-        throw new HttpException(
+      if (user.role !== Role.ADMIN && findTask.userId !== user.id) {
+        throw new ForbiddenException(
           'Você não tem permissão para deletar essa tarefa!',
-          HttpStatus.FORBIDDEN,
         );
       }
       await this.prisma.task.delete({
